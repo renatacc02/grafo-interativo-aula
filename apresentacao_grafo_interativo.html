@@ -1,0 +1,737 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Apresentação Interativa de Grafos - Vis.js</title>
+
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            dark: '#090d16',
+                            card: '#111827',
+                            cyan: '#06b6d4',
+                            purple: '#8b5cf6',
+                            emerald: '#10b981'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <!-- Vis.js Network CDN -->
+    <script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #060911;
+            color: #f3f4f6;
+            overflow: hidden;
+            user-select: none;
+        }
+
+        .mono {
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        #network-container {
+            width: 100vw;
+            height: 100vh;
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 1;
+        }
+
+        .glass-panel {
+            background: rgba(15, 23, 42, 0.75);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .glow-cyan {
+            box-shadow: 0 0 25px rgba(6, 182, 212, 0.35);
+        }
+
+        .glow-pulse {
+            animation: pulseGlow 2s infinite alternate;
+        }
+
+        @keyframes pulseGlow {
+            0% { box-shadow: 0 0 10px rgba(6, 182, 212, 0.2); }
+            100% { box-shadow: 0 0 25px rgba(6, 182, 212, 0.6); }
+        }
+
+        /* Custom Scrollbar for Settings Modal */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(15, 23, 42, 0.5);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(139, 92, 246, 0.5);
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body class="relative min-h-screen overflow-hidden">
+
+    <!-- Graph Canvas Container -->
+    <div id="network-container"></div>
+
+    <!-- Top Header Bar HUD -->
+    <header class="absolute top-4 left-4 right-4 z-10 flex items-center justify-between pointer-events-none">
+        <div class="glass-panel px-4 py-2.5 rounded-xl flex items-center gap-3 pointer-events-auto shadow-lg">
+            <div class="w-3 h-3 rounded-full bg-cyan-400 animate-ping"></div>
+            <div>
+                <h1 class="text-sm font-bold tracking-wide uppercase text-slate-200">Apresentação de Grafo</h1>
+                <p class="text-xs text-slate-400 font-mono" id="topology-name-display">Topologia: Anel (Ciclo de 4 Nós)</p>
+            </div>
+        </div>
+
+        <div class="flex items-center gap-2 pointer-events-auto">
+            <!-- Sound Toggle Button -->
+            <button id="btn-sound" onclick="toggleSound()" title="Ativar/Desativar Som [M]" class="glass-panel p-2.5 rounded-xl hover:bg-slate-800/80 text-slate-300 hover:text-cyan-400 transition-all">
+                <svg id="icon-sound-on" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"></path></svg>
+                <svg id="icon-sound-off" class="w-5 h-5 hidden text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15zM17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2"></path></svg>
+            </button>
+
+            <!-- Settings Modal Toggle -->
+            <button onclick="toggleSettingsModal()" title="Configurações do Grafo" class="glass-panel p-2.5 rounded-xl hover:bg-slate-800/80 text-slate-300 hover:text-cyan-400 transition-all">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+            </button>
+
+            <!-- Fullscreen Button -->
+            <button onclick="toggleFullscreen()" title="Alternar Tela Cheia [F]" class="glass-panel p-2.5 rounded-xl hover:bg-slate-800/80 text-slate-300 hover:text-cyan-400 transition-all">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-5h-4m4 0v4m0-4l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"></path></svg>
+            </button>
+        </div>
+    </header>
+
+    <!-- Bottom Presentation Controls HUD -->
+    <main class="absolute bottom-6 left-1/2 -translate-x-1/2 z-10 w-[92%] max-w-2xl pointer-events-none">
+        <div class="glass-panel rounded-2xl p-5 shadow-2xl pointer-events-auto border border-cyan-500/20 glow-cyan">
+            
+            <!-- Progress Bar -->
+            <div class="w-full bg-slate-800/80 h-2 rounded-full overflow-hidden mb-4 border border-slate-700/50">
+                <div id="progress-bar" class="bg-gradient-to-r from-cyan-500 to-purple-500 h-full transition-all duration-500 ease-out w-0"></div>
+            </div>
+
+            <!-- Step Information Card -->
+            <div class="mb-5 flex items-start justify-between gap-4">
+                <div>
+                    <div class="flex items-center gap-2 mb-1">
+                        <span id="step-badge" class="px-2.5 py-0.5 rounded-md text-xs font-mono font-bold bg-cyan-500/20 text-cyan-400 border border-cyan-500/30">
+                            PASSO 0 DE 4
+                        </span>
+                        <span id="step-status" class="text-xs text-slate-400 font-medium">Estado Inicial</span>
+                    </div>
+                    <h2 id="step-title" class="text-xl font-bold text-white tracking-tight">Nós Isolados Aguardando Conexões</h2>
+                    <p id="step-description" class="text-sm text-slate-300 mt-1 leading-relaxed">
+                        Pressione a <strong class="text-cyan-400">Barra de Espaço</strong> ou a <strong class="text-cyan-400">Seta Direita</strong> para conectar a primeira aresta do grafo pré-configurado.
+                    </p>
+                </div>
+            </div>
+
+            <!-- Quick Navigation Controls & Keyboard Hints -->
+            <div class="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-800">
+                
+                <!-- Action Buttons -->
+                <div class="flex items-center gap-2">
+                    <button id="btn-prev" onclick="prevStep()" class="px-3.5 py-2 rounded-xl glass-panel text-xs font-semibold text-slate-300 hover:text-white hover:bg-slate-800 transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5">
+                        <kbd class="mono bg-slate-800 px-1.5 py-0.5 rounded text-[10px] text-slate-400">←</kbd> Anterior
+                    </button>
+                    
+                    <button id="btn-next" onclick="nextStep()" class="px-4 py-2 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 font-bold text-xs shadow-lg shadow-cyan-500/20 transition-all flex items-center gap-1.5">
+                        Próximo <kbd class="mono bg-slate-950/30 px-1.5 py-0.5 rounded text-[10px] text-slate-900">Espaço</kbd>
+                    </button>
+
+                    <button onclick="resetGraph()" class="px-3 py-2 rounded-xl glass-panel text-xs font-medium text-slate-400 hover:text-red-400 hover:bg-red-500/10 transition-all" title="Reiniciar Grafo [R]">
+                        <kbd class="mono bg-slate-800 px-1 py-0.5 rounded text-[10px]">R</kbd> Reiniciar
+                    </button>
+                </div>
+
+                <!-- Step Jump Shortcuts -->
+                <div class="flex items-center gap-1 text-xs font-mono text-slate-400">
+                    <span class="mr-1 text-slate-500 hidden sm:inline">Saltar:</span>
+                    <button onclick="jumpToStep(1)" class="step-num-btn w-7 h-7 rounded-lg glass-panel hover:bg-cyan-500/20 hover:text-cyan-400 transition-all flex items-center justify-center font-bold">1</button>
+                    <button onclick="jumpToStep(2)" class="step-num-btn w-7 h-7 rounded-lg glass-panel hover:bg-cyan-500/20 hover:text-cyan-400 transition-all flex items-center justify-center font-bold">2</button>
+                    <button onclick="jumpToStep(3)" class="step-num-btn w-7 h-7 rounded-lg glass-panel hover:bg-cyan-500/20 hover:text-cyan-400 transition-all flex items-center justify-center font-bold">3</button>
+                    <button onclick="jumpToStep(4)" class="step-num-btn w-7 h-7 rounded-lg glass-panel hover:bg-cyan-500/20 hover:text-cyan-400 transition-all flex items-center justify-center font-bold">4</button>
+                </div>
+
+            </div>
+
+        </div>
+    </main>
+
+    <!-- Settings Drawer / Modal -->
+    <div id="settings-modal" class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md hidden flex items-center justify-center p-4">
+        <div class="glass-panel w-full max-w-lg rounded-2xl p-6 border border-slate-700 shadow-2xl relative max-h-[90vh] overflow-y-auto">
+            
+            <div class="flex items-center justify-between pb-4 border-b border-slate-800 mb-5">
+                <h3 class="text-lg font-bold text-white flex items-center gap-2">
+                    <svg class="w-5 h-5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"></path></svg>
+                    Configurações da Apresentação
+                </h3>
+                <button onclick="toggleSettingsModal()" class="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </div>
+
+            <div class="space-y-6">
+                
+                <!-- Topology Selection -->
+                <div>
+                    <label class="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-2">Selecione a Topologia (4 Nós / 4 Arestas)</label>
+                    <select id="select-topology" onchange="changeTopology(this.value)" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2.5 text-sm text-slate-200 focus:outline-none focus:border-cyan-500">
+                        <option value="ring">Anel / Ciclo (A → B → C → D → A)</option>
+                        <option value="star">Estrela com Laço Central (A-B, A-C, A-D, B-C)</option>
+                        <option value="grid">Malha Fechada / Grid (A-B, A-C, B-D, C-D)</option>
+                        <option value="chain">Cadeia com Atalho (A-B, B-C, C-D, A-C)</option>
+                    </select>
+                </div>
+
+                <!-- Direction Toggle -->
+                <div class="flex items-center justify-between">
+                    <div>
+                        <span class="block text-sm font-semibold text-slate-200">Arestas Direcionadas (Setas)</span>
+                        <span class="text-xs text-slate-400">Exibir sentido das conexões</span>
+                    </div>
+                    <label class="relative inline-flex items-center cursor-pointer">
+                        <input type="checkbox" id="toggle-directed" onchange="toggleDirected(this.checked)" class="sr-only peer" checked>
+                        <div class="w-11 h-6 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-cyan-500"></div>
+                    </label>
+                </div>
+
+                <!-- Custom Node Labels -->
+                <div>
+                    <label class="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-2">Personalizar Nomes dos Nós</label>
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <span class="text-xs text-slate-400">Nó 1</span>
+                            <input type="text" id="label-node-1" value="Nó A" onchange="updateNodeLabels()" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:border-cyan-500 focus:outline-none">
+                        </div>
+                        <div>
+                            <span class="text-xs text-slate-400">Nó 2</span>
+                            <input type="text" id="label-node-2" value="Nó B" onchange="updateNodeLabels()" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:border-cyan-500 focus:outline-none">
+                        </div>
+                        <div>
+                            <span class="text-xs text-slate-400">Nó 3</span>
+                            <input type="text" id="label-node-3" value="Nó C" onchange="updateNodeLabels()" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:border-cyan-500 focus:outline-none">
+                        </div>
+                        <div>
+                            <span class="text-xs text-slate-400">Nó 4</span>
+                            <input type="text" id="label-node-4" value="Nó D" onchange="updateNodeLabels()" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:border-cyan-500 focus:outline-none">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Physics Tuning -->
+                <div>
+                    <div class="flex justify-between items-center mb-1">
+                        <label class="text-xs font-bold text-slate-300 uppercase tracking-wider">Tensão da Mola / Física</label>
+                        <span id="physics-val-display" class="text-xs font-mono text-cyan-400">100</span>
+                    </div>
+                    <input type="range" min="30" max="250" value="100" id="slider-physics" oninput="updatePhysicsTension(this.value)" class="w-full h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-cyan-500">
+                </div>
+
+            </div>
+
+            <div class="mt-6 pt-4 border-t border-slate-800 flex justify-end">
+                <button onclick="toggleSettingsModal()" class="px-5 py-2 bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs rounded-xl transition-all">
+                    Concluído
+                </button>
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+        // State variables
+        let currentStep = 0;
+        let soundEnabled = true;
+        let isDirected = true;
+        let currentTopology = 'ring';
+        let audioCtx = null;
+
+        // Node labels state
+        let nodeLabels = {
+            1: 'Nó A',
+            2: 'Nó B',
+            3: 'Nó C',
+            4: 'Nó D'
+        };
+
+        // Network & Datasets references
+        let network = null;
+        let nodesDataSet = null;
+        let edgesDataSet = null;
+
+        // Topologies preset definition (Each with 4 predefined edges)
+        const TOPOLOGIES = {
+            ring: {
+                name: 'Anel (Ciclo de 4 Nós)',
+                edges: [
+                    { id: 'e1', from: 1, to: 2, label: 'E1' },
+                    { id: 'e2', from: 2, to: 3, label: 'E2' },
+                    { id: 'e3', from: 3, to: 4, label: 'E3' },
+                    { id: 'e4', from: 4, to: 1, label: 'E4' }
+                ],
+                descriptions: [
+                    "Ligação inicial de {N1} para {N2}. Estabelece a primeira rota de comunicação.",
+                    "Expansão da rede conectando {N2} a {N3}. Formação de um caminho de 3 vértices.",
+                    "Ligação de {N3} para {N4}. Todos os 4 nós agora têm conectividade na rede.",
+                    "Fechamento do Anel: Conexão de {N4} para {N1}. O ciclo de 4 arestas está completo!"
+                ]
+            },
+            star: {
+                name: 'Estrela com Laço',
+                edges: [
+                    { id: 'e1', from: 1, to: 2, label: 'E1' },
+                    { id: 'e2', from: 1, to: 3, label: 'E2' },
+                    { id: 'e3', from: 1, to: 4, label: 'E3' },
+                    { id: 'e4', from: 2, to: 3, label: 'E4' }
+                ],
+                descriptions: [
+                    "O nó central {N1} conecta-se com {N2}.",
+                    "O nó central {N1} conecta-se com {N3}.",
+                    "O nó central {N1} estabelece conexão com {N4} (Topologia em estrela pura).",
+                    "Redundância criada: {N2} e {N3} conectam-se diretamente entre si."
+                ]
+            },
+            grid: {
+                name: 'Malha Fechada 2x2',
+                edges: [
+                    { id: 'e1', from: 1, to: 2, label: 'E1' },
+                    { id: 'e2', from: 1, to: 3, label: 'E2' },
+                    { id: 'e3', from: 2, to: 4, label: 'E3' },
+                    { id: 'e4', from: 3, to: 4, label: 'E4' }
+                ],
+                descriptions: [
+                    "Aresta superior estabelecida de {N1} para {N2}.",
+                    "Aresta esquerda estabelecida de {N1} para {N3}.",
+                    "Aresta direita conectando {N2} a {N4}.",
+                    "Aresta inferior conectando {N3} a {N4}. Grid 2x2 totalmente interconectado."
+                ]
+            },
+            chain: {
+                name: 'Cadeia com Atalho',
+                edges: [
+                    { id: 'e1', from: 1, to: 2, label: 'E1' },
+                    { id: 'e2', from: 2, to: 3, label: 'E2' },
+                    { id: 'e3', from: 3, to: 4, label: 'E3' },
+                    { id: 'e4', from: 1, to: 3, label: 'E4' }
+                ],
+                descriptions: [
+                    "Ligação inicial entre {N1} e {N2}.",
+                    "Continuação da cadeia linear conectando {N2} a {N3}.",
+                    "Extensão final da cadeia alcançando {N4}.",
+                    "Atalho de alta velocidade criado diretamente entre {N1} e {N3}!"
+                ]
+            }
+        };
+
+        // Default visual styling constants
+        const NODE_COLORS = {
+            default: {
+                background: '#1e293b',
+                border: '#38bdf8',
+                highlight: { background: '#0284c7', border: '#38bdf8' }
+            },
+            active: {
+                background: '#0284c7',
+                border: '#38bdf8',
+                highlight: { background: '#0369a1', border: '#7dd3fc' }
+            }
+        };
+
+        function initAudio() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+        }
+
+        function playSound(type, stepIndex = 1) {
+            if (!soundEnabled) return;
+            initAudio();
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+
+            const now = audioCtx.currentTime;
+
+            if (type === 'connect') {
+                // Ascending chime tone depending on step
+                const baseFreq = 300 + (stepIndex * 120);
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(baseFreq, now);
+                osc.frequency.exponentialRampToValueAtTime(baseFreq * 1.5, now + 0.15);
+
+                gain.gain.setValueAtTime(0.2, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.25);
+
+                osc.start(now);
+                osc.stop(now + 0.25);
+            } else if (type === 'disconnect') {
+                // Descending tone
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(450, now);
+                osc.frequency.exponentialRampToValueAtTime(200, now + 0.15);
+
+                gain.gain.setValueAtTime(0.2, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.18);
+
+                osc.start(now);
+                osc.stop(now + 0.18);
+            } else if (type === 'complete') {
+                // Fanfare / Success chord
+                [523.25, 659.25, 783.99].forEach((freq, idx) => {
+                    const oscChord = audioCtx.createOscillator();
+                    const gainChord = audioCtx.createGain();
+                    oscChord.connect(gainChord);
+                    gainChord.connect(audioCtx.destination);
+
+                    oscChord.type = 'sine';
+                    oscChord.frequency.setValueAtTime(freq, now + (idx * 0.06));
+
+                    gainChord.gain.setValueAtTime(0.15, now + (idx * 0.06));
+                    gainChord.gain.exponentialRampToValueAtTime(0.001, now + 0.5);
+
+                    oscChord.start(now + (idx * 0.06));
+                    oscChord.stop(now + 0.5);
+                });
+            }
+        }
+
+        function toggleSound() {
+            soundEnabled = !soundEnabled;
+            document.getElementById('icon-sound-on').classList.toggle('hidden', !soundEnabled);
+            document.getElementById('icon-sound-off').classList.toggle('hidden', soundEnabled);
+        }
+
+        function initNetwork() {
+            const container = document.getElementById('network-container');
+
+            // Setup Nodes dataset
+            const initialNodes = [
+                { id: 1, label: nodeLabels[1], shape: 'dot', size: 28, font: { color: '#ffffff', size: 16, face: 'Inter', strokeWidth: 4, strokeColor: '#0f172a' } },
+                { id: 2, label: nodeLabels[2], shape: 'dot', size: 28, font: { color: '#ffffff', size: 16, face: 'Inter', strokeWidth: 4, strokeColor: '#0f172a' } },
+                { id: 3, label: nodeLabels[3], shape: 'dot', size: 28, font: { color: '#ffffff', size: 16, face: 'Inter', strokeWidth: 4, strokeColor: '#0f172a' } },
+                { id: 4, label: nodeLabels[4], shape: 'dot', size: 28, font: { color: '#ffffff', size: 16, face: 'Inter', strokeWidth: 4, strokeColor: '#0f172a' } }
+            ];
+
+            nodesDataSet = new vis.DataSet(initialNodes);
+            edgesDataSet = new vis.DataSet([]); // Starts empty
+
+            const data = {
+                nodes: nodesDataSet,
+                edges: edgesDataSet
+            };
+
+            const options = {
+                nodes: {
+                    borderWidth: 3,
+                    color: NODE_COLORS.default,
+                    shadow: {
+                        enabled: true,
+                        color: 'rgba(6, 182, 212, 0.4)',
+                        size: 15
+                    }
+                },
+                edges: {
+                    width: 3.5,
+                    color: {
+                        color: '#38bdf8',
+                        highlight: '#8b5cf6',
+                        hover: '#8b5cf6'
+                    },
+                    arrows: {
+                        to: { enabled: isDirected, scaleFactor: 0.8 }
+                    },
+                    smooth: {
+                        type: 'continuous',
+                        roundness: 0.2
+                    },
+                    shadow: {
+                        enabled: true,
+                        color: 'rgba(56, 189, 248, 0.3)',
+                        size: 8
+                    },
+                    font: {
+                        color: '#cbd5e1',
+                        size: 12,
+                        face: 'JetBrains Mono',
+                        background: '#0f172a',
+                        strokeWidth: 0
+                    }
+                },
+                physics: {
+                    enabled: true,
+                    barnesHut: {
+                        gravitationalConstant: -3000,
+                        centralGravity: 0.3,
+                        springLength: 120,
+                        springConstant: 0.04,
+                        damping: 0.09
+                    }
+                },
+                interaction: {
+                    hover: true,
+                    zoomView: true,
+                    dragView: true
+                }
+            };
+
+            network = new vis.Network(container, data, options);
+
+            // Re-apply highlight effect after animation
+            updateGraphState();
+        }
+
+        function updateGraphState(prevStepNum = currentStep) {
+            const topo = TOPOLOGIES[currentTopology];
+            const targetEdges = topo.edges.slice(0, currentStep);
+
+            // Update edges in DataSet
+            edgesDataSet.clear();
+            edgesDataSet.add(targetEdges.map(e => ({
+                ...e,
+                arrows: { to: { enabled: isDirected } }
+            })));
+
+            // Highlight active nodes involved in current edge connections
+            const activeNodeIds = new Set();
+            targetEdges.forEach(e => {
+                activeNodeIds.add(e.from);
+                activeNodeIds.add(e.to);
+            });
+
+            // Update node colors & glow dynamically
+            nodesDataSet.forEach(node => {
+                const isActive = activeNodeIds.has(node.id);
+                nodesDataSet.update({
+                    id: node.id,
+                    color: isActive ? NODE_COLORS.active : NODE_COLORS.default,
+                    size: isActive ? 32 : 28
+                });
+            });
+
+            // Update UI HUD Text & Progress Bar
+            const percent = (currentStep / 4) * 100;
+            document.getElementById('progress-bar').style.width = `${percent}%`;
+
+            document.getElementById('step-badge').innerText = `PASSO ${currentStep} DE 4`;
+            
+            const stepStatus = document.getElementById('step-status');
+            const stepTitle = document.getElementById('step-title');
+            const stepDesc = document.getElementById('step-description');
+
+            if (currentStep === 0) {
+                stepStatus.innerText = "Estado Inicial";
+                stepTitle.innerText = "Nós Isolados Aguardando Conexões";
+                stepDesc.innerHTML = 'Pressione a <strong class="text-cyan-400">Barra de Espaço</strong> ou a <strong class="text-cyan-400">Seta Direita</strong> para conectar a primeira aresta do grafo.';
+            } else {
+                const lastEdge = topo.edges[currentStep - 1];
+                const fromLabel = nodeLabels[lastEdge.from];
+                const toLabel = nodeLabels[lastEdge.to];
+
+                stepStatus.innerText = `Aresta ${lastEdge.label} Adicionada`;
+                stepTitle.innerText = `Conexão: ${fromLabel} ${isDirected ? '➔' : '—'} ${toLabel}`;
+
+                let rawDesc = topo.descriptions[currentStep - 1];
+                rawDesc = rawDesc
+                    .replace('{N1}', `<strong class="text-cyan-400">${nodeLabels[1]}</strong>`)
+                    .replace('{N2}', `<strong class="text-cyan-400">${nodeLabels[2]}</strong>`)
+                    .replace('{N3}', `<strong class="text-cyan-400">${nodeLabels[3]}</strong>`)
+                    .replace('{N4}', `<strong class="text-cyan-400">${nodeLabels[4]}</strong>`);
+
+                stepDesc.innerHTML = rawDesc;
+            }
+
+            // Button state disabled update
+            document.getElementById('btn-prev').disabled = (currentStep === 0);
+
+            // Button jump numbers active state
+            document.querySelectorAll('.step-num-btn').forEach((btn, idx) => {
+                const stepNum = idx + 1;
+                if (stepNum <= currentStep) {
+                    btn.classList.add('bg-cyan-500/30', 'text-cyan-300', 'border-cyan-500/50');
+                } else {
+                    btn.classList.remove('bg-cyan-500/30', 'text-cyan-300', 'border-cyan-500/50');
+                }
+            });
+
+            // Physics impulse on graph update
+            network.stabilize(50);
+        }
+
+        function nextStep() {
+            if (currentStep < 4) {
+                currentStep++;
+                playSound('connect', currentStep);
+                if (currentStep === 4) {
+                    setTimeout(() => playSound('complete'), 200);
+                }
+                updateGraphState();
+            }
+        }
+
+        function prevStep() {
+            if (currentStep > 0) {
+                currentStep--;
+                playSound('disconnect');
+                updateGraphState();
+            }
+        }
+
+        function jumpToStep(step) {
+            if (step >= 0 && step <= 4 && step !== currentStep) {
+                const isForward = step > currentStep;
+                currentStep = step;
+                if (isForward) {
+                    playSound('connect', currentStep);
+                } else {
+                    playSound('disconnect');
+                }
+                updateGraphState();
+            }
+        }
+
+        function resetGraph() {
+            currentStep = 0;
+            playSound('disconnect');
+            updateGraphState();
+        }
+
+        function toggleSettingsModal() {
+            const modal = document.getElementById('settings-modal');
+            modal.classList.toggle('hidden');
+        }
+
+        function changeTopology(type) {
+            if (TOPOLOGIES[type]) {
+                currentTopology = type;
+                document.getElementById('topology-name-display').innerText = `Topologia: ${TOPOLOGIES[type].name}`;
+                updateGraphState();
+            }
+        }
+
+        function toggleDirected(val) {
+            isDirected = val;
+            updateGraphState();
+        }
+
+        function updateNodeLabels() {
+            nodeLabels[1] = document.getElementById('label-node-1').value || 'Nó A';
+            nodeLabels[2] = document.getElementById('label-node-2').value || 'Nó B';
+            nodeLabels[3] = document.getElementById('label-node-3').value || 'Nó C';
+            nodeLabels[4] = document.getElementById('label-node-4').value || 'Nó D';
+
+            // Refresh node labels in Vis.js Dataset
+            for (let id = 1; id <= 4; id++) {
+                nodesDataSet.update({ id: id, label: nodeLabels[id] });
+            }
+
+            updateGraphState();
+        }
+
+        function updatePhysicsTension(val) {
+            document.getElementById('physics-val-display').innerText = val;
+            network.setOptions({
+                physics: {
+                    barnesHut: {
+                        springLength: parseInt(val)
+                    }
+                }
+            });
+        }
+
+        function toggleFullscreen() {
+            if (!document.fullscreenElement) {
+                document.documentElement.requestFullscreen().catch(err => {
+                    console.warn(`Erro ao ativar Tela Cheia: ${err.message}`);
+                });
+            } else {
+                if (document.exitFullscreen) {
+                    document.exitFullscreen();
+                }
+            }
+        }
+
+        window.addEventListener('keydown', (e) => {
+            // Ignore key events if typing inside an input box
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+
+            switch(e.key) {
+                case ' ':
+                case 'ArrowRight':
+                case 'Enter':
+                    e.preventDefault();
+                    nextStep();
+                    break;
+                case 'ArrowLeft':
+                case 'Backspace':
+                    e.preventDefault();
+                    prevStep();
+                    break;
+                case '1':
+                    jumpToStep(1);
+                    break;
+                case '2':
+                    jumpToStep(2);
+                    break;
+                case '3':
+                    jumpToStep(3);
+                    break;
+                case '4':
+                    jumpToStep(4);
+                    break;
+                case '0':
+                    jumpToStep(0);
+                    break;
+                case 'r':
+                case 'R':
+                    resetGraph();
+                    break;
+                case 'f':
+                case 'F':
+                    toggleFullscreen();
+                    break;
+                case 'm':
+                case 'M':
+                    toggleSound();
+                    break;
+            }
+        });
+
+        window.onload = function() {
+            initNetwork();
+        };
+
+        // Window resize adjustment
+        window.addEventListener('resize', () => {
+            if (network) network.fit();
+        });
+    </script>
+</body>
+</html>
